@@ -1,0 +1,242 @@
+<html>
+<body>
+    <h1 Notes at your service!></h1>
+    <a href="notes"><font size="20">Start</a>
+    <br/>
+</body>
+</html>
+
+package ru.anbel.notes.models;
+
+// Модель заметки
+public class MyNote {
+
+    private int id;
+    private String note = "Text";
+
+    public MyNote() {}
+
+    public MyNote(int id, String note) {
+        this.id = id;
+        this.note = note;
+    }
+
+    public int getId() {
+        return id;
+    }
+    public void setId(int id) {
+        this.id = id;
+    }
+
+    public String getNote() {
+        return note;
+    }
+    public void setNote(String text) {
+        this.note = text;
+    }
+
+}
+
+
+
+package ru.anbel.notes.dao;
+
+import org.springframework.stereotype.Component;
+import ru.anbel.notes.models.MyNote;
+
+import java.util.ArrayList;
+import java.util.List;
+
+@Component
+public class MyNotesDAO {
+    private static int NOTES_COUNT; // Переменная для установки id
+    private List<MyNote> notes; // База данных заметок
+
+    public MyNotesDAO() {
+        notes = new ArrayList<MyNote>();
+    }
+
+    public java.lang.Object index() { // Метод, возвращающий все заметки
+        return notes;
+    }
+
+    public MyNote show(int id) { // Метод возвращает заметку по id или null
+        return notes.stream().filter(n -> n.getId() == id).findAny().orElse(null);
+    }
+
+    public void save(MyNote webNote) { // Метод сохранения
+        webNote.setId(++NOTES_COUNT);
+        notes.add(webNote);
+    }
+
+    public void update(int id, MyNote updatedNote) { // Метод изменения
+        MyNote toUpdateNote = show(id);
+        toUpdateNote.setNote(updatedNote.getNote());
+    }
+
+    public void delete(int id) { // Метод удаления
+        notes.removeIf(n -> n.getId() == id);
+    }
+
+}
+
+package ru.anbel.notes.controllers;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.*;
+import ru.anbel.notes.dao.MyNotesDAO;
+import ru.anbel.notes.models.MyNote;
+
+// Прототип контроллера
+@Controller
+@RequestMapping("/notes")
+public class MyNotesController {
+
+    private final MyNotesDAO myNotesDAO;
+
+    @Autowired
+    public MyNotesController(MyNotesDAO myNotesDAO) {
+        this.myNotesDAO = myNotesDAO;
+    }
+
+    @GetMapping()
+    public String index(Model model) {
+        model.addAttribute("notes",myNotesDAO.index());
+        return "notes/index";
+    }
+
+    @GetMapping("/{id}")
+    public String show(@PathVariable("id") int id, Model model) {
+        model.addAttribute("note", myNotesDAO.show(id));
+        return "notes/show";
+    }
+
+    @GetMapping("/new")
+    public String newNote(Model model) {
+        model.addAttribute("myNote", new MyNote());
+        return "notes/new";
+    }
+
+    @PostMapping()
+    public String create(@ModelAttribute("myNote") MyNote myNote) {
+        myNotesDAO.save(myNote);
+        return "redirect:/notes";
+    }
+
+    @GetMapping("/{id}/edit")
+    public String edit(Model model, @PathVariable("id") int id) {
+        model.addAttribute("myNote",myNotesDAO.show(id));
+        return "notes/edit";
+    }
+
+    @PatchMapping("/{id}")
+    public String update(@ModelAttribute("myNote") MyNote myNote, @PathVariable("id") int id) {
+        myNotesDAO.update(id, myNote);
+        return "redirect:/notes";
+    }
+
+    @DeleteMapping("/{id}")
+    public String delete(@PathVariable("id") int id) {
+        myNotesDAO.delete(id);
+        return "redirect:/notes";
+    }
+
+    @GetMapping("/back")
+    public String redirect() {
+        return "redirect:/notes";
+    }
+
+}
+
+
+package ru.anbel.notes.config;
+
+import jakarta.servlet.ServletContext;
+import jakarta.servlet.ServletException;
+import org.springframework.web.filter.HiddenHttpMethodFilter;
+import org.springframework.web.servlet.support.AbstractAnnotationConfigDispatcherServletInitializer;
+
+
+public class MyNotesInitializer extends AbstractAnnotationConfigDispatcherServletInitializer {
+
+    @Override
+    protected Class<?>[] getRootConfigClasses() { 
+        return null;
+    }
+
+    @Override
+    protected Class<?>[] getServletConfigClasses() { 
+        return new Class[] {MyNotesConfig.class};
+    }
+
+    @Override
+    protected String[] getServletMappings() { 
+        return new String[] {"/"}; // Любые
+    }
+
+    public void onStartup(ServletContext aServletContext) throws ServletException {
+        super.onStartup(aServletContext);
+        registerHiddenFieldFilter(aServletContext);
+    }
+
+
+    private void registerHiddenFieldFilter(ServletContext aContext) {
+        aContext.addFilter("hiddenHttpMethodFilter", new HiddenHttpMethodFilter()).addMappingForUrlPatterns(null, true, "/*");
+    }
+
+}
+
+package ru.anbel.notes.config;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.servlet.config.annotation.EnableWebMvc;
+import org.springframework.web.servlet.config.annotation.ViewResolverRegistry;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+import org.thymeleaf.spring6.SpringTemplateEngine;
+import org.thymeleaf.spring6.templateresolver.SpringResourceTemplateResolver;
+import org.thymeleaf.spring6.view.ThymeleafViewResolver;
+
+@Configuration
+@ComponentScan("ru.anbel.notes")
+@EnableWebMvc
+public class MyNotesConfig implements WebMvcConfigurer {
+
+    private final ApplicationContext applicationContext; // Поле для хранения контекста приложения
+
+    @Autowired
+    public MyNotesConfig(ApplicationContext applicationContext) {
+        this.applicationContext = applicationContext;
+    }
+
+    @Bean
+    public SpringResourceTemplateResolver templateResolver() { 
+        SpringResourceTemplateResolver templateResolver = new SpringResourceTemplateResolver(); 
+        templateResolver.setApplicationContext(applicationContext); 
+        templateResolver.setPrefix("/WEB-INF/views/"); 
+        templateResolver.setSuffix(".html"); 
+        return templateResolver; 
+    }
+
+    @Bean 
+    public SpringTemplateEngine templateEngine() { //
+        SpringTemplateEngine templateEngine = new SpringTemplateEngine(); // 
+        templateEngine.setTemplateResolver(templateResolver()); 
+        templateEngine.setEnableSpringELCompiler(true); 
+        return templateEngine; 
+    }
+
+    @Override 
+    public void configureViewResolvers(ViewResolverRegistry registry) { 
+        ThymeleafViewResolver resolver = new ThymeleafViewResolver(); 
+        resolver.setTemplateEngine(templateEngine());
+        registry.viewResolver(resolver); 
+    }
+
+}
+
